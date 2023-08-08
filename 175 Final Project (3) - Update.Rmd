@@ -1,0 +1,440 @@
+---
+title: "Final Project 175"
+author: "Branson Enani Mikaela Statner Leslie Liu"
+date: "2022-11-18"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+options(repos = list(CRAN="http://cran.rstudio.com/"))
+
+```
+
+***Report on Competing Risks Model for Cardiovascular Disease***
+
+We aim to explore how BMI, Gender and Age affect Cardiovascular health, specifically the event of death from cardiovascular disease.
+
+We will perform a competing risk analysis on data from 453 patients. The event that we are focusing on is death from CVD (cardiovascular disease). This event is of primary clinical interest and the other causes/events are "competing" with the primary event. The competing risk is death from other causes. We also want to take into account the effect of several covariates such as Sex, Age, and BMI. There are 453 observations from subjects age 20 to 114. Variables include gender, with 0 being coded as male and 1 being coded as female, Body Mass Index (BMI) in kilograms per m\^2, follow up time in days, and the event type. For the event type, a 1 corresponds to death from a cardiovascular disease, a 2 corresponds to death from another cause, and 0 is censored.
+
+The data for a competing risks model is different than other survival data because instead of each patient having two different outcomes (being censored or experiencing an inevitable event), the subject may also experience an alternative event, a competing risk. When we factor in these observations to the Kaplan-Meier model, it produces an estimate that is biased upward even though the events may be independent. Therefore, when doing regression on competing risks, we have two different options.
+
+(1) We can model the effects of covariates on the cause-specific hazard of the outcome, which allows us to estimate the effect of the covariates on subjects who have not yet had an event.
+
+(2) We can model the effects of covariates on the cumulative incidence function which allows us to estimate the effect of the covariates on the absolute risk of the outcome over time.
+
+Below we are downloading the required packages for survival analysis and reading in the raw data.
+
+```{r, include = FALSE}
+library(survival)
+library(MASS)
+library(tidyr)
+library(survminer)
+library(dplyr)
+install.packages('cmprsk')
+library(cmprsk)
+```
+
+```{r}
+# getwd()
+# setwd("/Users/Mikaela/Desktop/PSTAT175")
+comprisk_data <- read.csv("comprisk.dat", header = FALSE)
+comprisk  <- read.table("comprisk.dat", quote = "\"", comment.char="")
+
+
+# comprisk_data <- read.csv("~/175-Final-Project/comprisk.dat")
+# comprisk  <- read.table('~/175-Final-Project/comprisk.dat', quote = "\"", comment.char="")
+
+names <- c('ID', 'Age', 'Gender', 'BMI', 'Time', 'Status')
+colnames(comprisk) <- names
+```
+
+Here we convert the columns to numeric values under their respective covariates.
+
+```{r}
+comprisk.age <-(comprisk$Age)
+comprisk.bmi<-(comprisk$BMI)
+comprisk.time <- (comprisk$Time)
+comprisk.status <- (comprisk$Status)
+comprisk.gender <- (comprisk$Gender)
+```
+
+The number of patients who died from a cardiovascular disease, died from another cause or were censored can be obtained using the table() function:
+
+```{r}
+table(comprisk$Status)
+```
+
+There are 167 events due to death from cardiovascular disease, 170 events due to death from other causes, and 116 censored events.
+
+Cumulative Incidence Function
+
+```{r}
+CI.overall <- cmprsk::cuminc(comprisk.time, fstatus = comprisk$Status)
+CI.overall
+```
+
+The printed result shows the estimated marginal probability of each outcome (1=death from a cardiovascular disease, 2=death from another cause) at days 500, 1000, and 1500 along with the variance for each estimate. For example, the estimated marginal probability of death from a cardiovascular disease by day 1000 is 32.6%, and the estimated marginal probability of death from another cause by day 1000 is 20.3%. The information can be plotted to get an overall picture of the cumulative incidence of each event over the entire time course, given below.
+
+```{r}
+ plot(CI.overall, curvlab = c("death from a cardiovascular disease", "death from another cause"), xlab = "Days", ylab = "Cumulative incidence of event", main = "Competing Risks Analysis")
+
+
+ggcompetingrisks(CI.overall,  conf.int = TRUE, xlab = "Time in Days", 
+                      ylab = "Cumulative incidence of event",
+                      title = "Competing Risks Analysis with Confidence Interval") + scale_color_discrete(labels = c("death from a cardiovascular disease", "death from another cause"))
+```
+
+Next, we can calculate the separate estimates of the cumulative incidence for death from CVD or death from other causes. This can be accomplished by using the group argument in the cmprsk() function
+
+Cumulative Incidence analyzing GENDER
+
+```{r}
+
+CI.gender <- cmprsk::cuminc(comprisk.time, fstatus = comprisk$Status,
+group = comprisk$Gender)
+CI.gender
+```
+
+This cumulative incidence function that is accounting for difference in gender can be plotted:
+
+```{r}
+plot(CI.gender, lty = c(1, 1, 2, 2), col = c("red", "blue", "red",
+"blue"), curvlab = c("death from a cardiovascular disease, Male", "death from a cardiovascular disease, Female",
+"death from another cause, Male", "death from another cause, Female"), xlab = "Days")
+```
+
+The event of death from Cardiovascular Disease (CVD) is higher in female patients, and death from other causes is higher in male patients. Next we will perform a formal test for differences in follow-up time for death by CVD and death by other causes between gender.
+
+Cumulative Incidence analyzing AGE
+
+```{r}
+CI.age <- cmprsk::cuminc(comprisk.time, fstatus = comprisk$Status,
+group = (comprisk.age < 50))
+CI.age
+```
+
+This cumulative incidence function that is accounting for if the subject is older or younger than 50 years can be plotted:
+
+```{r}
+plot(CI.age, lty = c(1, 1, 2, 2), col = c("red", "blue", "red",
+"blue"), curvlab = c("death from a cardiovascular disease, older than 50", "death from a cardiovascular disease, younger than 50",
+"death from another cause, older than 50", "death from another cause, younger than 50"), xlab = "Days")
+```
+
+The event of death from Cardiovascular Disease (CVD) is higher in patients older than 50, and death from other causes is higher in patients younger than 50. Death from Cardiovascular Disease (CVD) for subjects under 50 years old is almost completely horizontal at y=0. other causes is higher in male patients.
+
+Cumulative Incidence analyzing BMI
+
+```{r}
+CI.bmi <- cmprsk::cuminc(comprisk.time, fstatus = comprisk$Status,
+group = (comprisk.bmi < 30))
+CI.bmi
+```
+
+This cumulative incidence function that is accounting for if the subject has a bmi greater than 30 can be plotted:
+
+```{r}
+plot(CI.bmi, lty = c(1, 1, 2, 2), col = c("red", "blue", "red",
+"blue"), curvlab = c("death from a cardiovascular disease, bmi above 30", "death from a cardiovascular disease, bmi below 30",
+"death from another cause, bmi above 30", "death from another cause, bmi below 30"), xlab = "Days")
+```
+
+The event of death from Cardiovascular Disease (CVD) is higher in patients with a bmi above 30, and death from other causes is higher in patients with a bmi below 30.
+
+Next we will perform a formal test for differences in follow-up time for death by CVD and death by other causes between gender.
+
+In doing the previous analysis, we show that, in the presence of competing risks, the basic descriptive statistic of event occurrence is not the survival function. Instead, it is the cumulative incidence function for each event type.
+
+The reason that the competing risks plot is different from the normal survival curve is because the individual probabilities do not eventually flatten at probability = 1. If we only have 1 event involved, eventually the probability will be 1 because over a long enough time the event will occur. Given the fact that we have two events, each of them reach a probability that is less than 1 because they are competing
+
+Since Status is non binary (0= censor, 1= CVD Death, 2=Non CVD Death) we need to split up the data into binary groups.
+
+```{r}
+status_cvd_event <- comprisk.status == 1
+#Status 1 includes treats cvd events as the event of interest
+
+status_noncvd_event <- comprisk.status == 2
+#Status 2 includes treats non cvd events as the event of interest
+
+status_every_outcome <- comprisk.status > 0
+#Status 3 includes considers non-censored events as the events of interest 
+
+```
+
+Now let's turn them into survival objects.
+
+```{r}
+vec1 <- Surv(comprisk.time, status_cvd_event)
+vec2 <- Surv(comprisk.time, status_noncvd_event)
+vec3 <- Surv(comprisk.time, status_greater_than_zero)
+
+```
+
+
+
+
+
+
+
+***Kaplan-Meier Estimates***
+
+
+We are plotting a Kaplan-Meier estimate of the survival probability.
+
+The Kaplan--Meier estimator is used to estimate the survival function. The Kaplan--Meier estimator is a step-down function, with each step at each time an event of interest occurs. The height of a step at a given time is the proportion of subjects at risk (i.e., free of the event of interest) just before the given time, who experience the event at that time"(1182, )
+
+
+
+Here we want to get a Kaplan Meier Curve with our event of interest being CVD
+
+```{r}
+
+comprisk.survfit <- survfit(vec1 ~1, data = comprisk)
+fit <- (comprisk.survfit)
+plot(fit, main = "Kaplan Meier Curve of CVD Survival", ylab = 'Survival Probability', xlab = 'Days')
+```
+This curve shows the Kaplan Meier estimate of survival when a CVD event is treated as our event of interest.
+
+```{r}
+
+comprisk.survfit2 <- survfit(vec2 ~1, data = comprisk)
+fit2 <- (comprisk.survfit2)
+plot(fit2, main = "Kaplan Meier Curve of Other Causes Survival", ylab = 'Survival Probability', xlab = 'Days')
+```
+This curve shows the Kaplan Meier estimate of survival when  "Other causes" is treated as our event of interest.
+
+
+```{r}
+
+comprisk.survfit3 <- survfit(vec3 ~1, data = comprisk)
+fit3 <- (comprisk.survfit3)
+plot(fit3, main = "Kaplan Meier Curve of All Events Survival", ylab = 'Survival Probability', xlab = 'Days')
+```
+This curve shows the Kaplan Meier estimate of survival when any outcome is treated as our event of interest.
+
+
+
+
+***Coxph Models***
+
+The coxph function estimates the hazard proportion.
+
+Here are the various coxph models when we include gender as our covariate.
+
+```{r}
+cox1 <- coxph(vec1~Gender, data = comprisk)
+summary(cox1)
+```
+
+
+This coxph model uses gender as our covariate when we fit our coxph model for a CVD event. We can interpret these results by noticing the coefficient = 0.417. This number is positive, therefore it positively affects the hazard ratio and hence negatively influences the survival function. Additionally, the exp(coef) = 1.5 which means there is a 150% increase in the hazard rate for males. This means that being a female in the study positively affects your survival probability compared to being a male. p = 0.007 is less than alpha = 0.05, so we  reject the null hypothesis and conclude that it is statistically significant to include gender in this model.
+
+```{r}
+cox2 <- coxph(vec2~Gender, data = comprisk)
+summary(cox2)
+```
+
+
+This coxph model uses age as our covariate when we fit our coxph model for "other causes". We can interpret these results by noticing the coefficient = -0.174. This number is negative, therefore it negatively affects the hazard ratio and hence positively influences the survival function. Additionally, the exp(coef) = 0.8395 which means there is a 84% increase in the hazard rate for males. This means that being a female in the study positively affects your survival probability compared to being a male. p = 0.277 is greater than alpha = 0.05, so we fail to reject the null hypothesis and conclude that it is not statistically significant to include which sex in this model.
+
+```{r}
+cox3 <- coxph(vec3~Gender, data = comprisk)
+summary(cox3)
+```
+
+Here we are fitting our coxph with gender as our covariate where all outcomes are considered (CVD and Other Causes). We can interpret these results by noticing the coefficient = 0.1258. This number is positive, therefore it positively affects the hazard ratio and hence negatively influences the survival function. Additionally, the exp(coef) = 1.13 which means there is a 113% increase in the hazard rate for males. This means that being a female in the study positively affects your survival probability compared to being a male. p = 0.254 is greater than alpha = 0.05, so we fail to reject the null hypothesis and conclude that it is not statistically significant to include which sex in our model.
+
+NOT SURE ABOUT THIS GRAPH
+
+
+We want to compare how Gender has an effect on Survival from a CVD event versus a Non Cvd Event
+```{r}
+
+fit1_gender <- survfit(vec1~Gender, data = comprisk)
+fit2_gender <- survfit(vec2~Gender, data = comprisk)
+fit3_gender <- survfit(vec3~Gender, data = comprisk)
+
+ggsurvplot(fit1_gender, comprisk, title = "CVD survival estimate - Gender Comparison", xlab = "Days"  )
+ggsurvplot(fit2_gender, comprisk, title = "Other Causes survival estimate - Gender Comparison", xlab = "Days" )
+ggsurvplot(fit3_gender, comprisk , title ="Any outcome - Gender Comparison", xlab = "Days")
+
+
+
+# # Kaplan Meier
+# plot(female_fit, main = "KM estimators of Survival Function for Females")
+# 
+# 
+# fit1 <- survfit(cox1, data =comprisk)
+# ggsurvplot(fit1, data= comprisk, xlab="Days", ylab= "s(t)")
+```
+Each of these Curves compare Male (0) and Female (1), for each of our different survival vectors. The first plot compares gender when considering CVD as our event, the second plot compares gender when considering other causes as our event, and the third plot compares gender for any outcome. 
+
+
+
+
+After analysis gender is not statistically significant from these p-values.
+
+Proportional hazards models, or Cox proportional hazards models, allow us to investigate the association between a set of covariates and the event of interest. The Cox proportional hazards model estimates the hazard function.
+
+Now we are creating coxph models with age as our covariate of interest.
+
+```{r}
+coxage1 <- coxph(vec1~Age, data = comprisk)
+summary(coxage1)
+```
+
+This coxph model uses age as our covariate when we fit our coxph model for CVD as our event of interest.We can interpret these results by noticing the coefficient = -0.0279. This number is negative, therefore it negatively affects the hazard ratio and hence negatively influences the survival function. p = 1.15e-09 is less than alpha = 0.05, so we reject the null hypothesis and conclude that it is statistically significant to include age in this model.
+
+```{r}
+coxage2 <- coxph(vec2~Age, data = comprisk)
+summary(coxage2)
+```
+
+This coxph model uses age as our covariate when we fit our coxph model for other causes as the event of interest. We can interpret these results by noticing the coefficient = 0.084. This number is positive, therefore it positively affects the hazard ratio and hence negatively influences the survival function. p <2e-16 is less than alpha = 0.05, so we reject the null hypothesis and conclude that it is statistically significant to include age in this model.
+
+```{r}
+coxage3 <- coxph(vec3~Age, data = comprisk)
+summary(coxage3)
+```
+
+This coxph model uses age as our covariate when we fit our coxph model for any outcome. We can interpret these results by noticing the coefficient = 0.023. This number is positive, therefore it positively affects the hazard ratio and hence negatively influences the survival function. p = 1.06e-13 is less than alpha = 0.05, so we reject the null hypothesis and conclude that it is statistically significant to include age in this model.
+
+
+```{r}
+
+
+
+ggplot(comprisk)+
+  geom_bar(aes(x =Age))
+mean(comprisk.age)
+
+fit1_age <- survfit(vec1~Age<70, data = comprisk)
+fit2_age <- survfit(vec2~Age<70, data = comprisk)
+fit3_age <- survfit(vec3~Age<70, data = comprisk)
+# fits <- list(gender = f1)
+# legend.title <- list("gender")
+# gender_plot_cvd <- ggsurvplot_combine(fits, comprisk, legend.title = legend.title)
+# gender_plot_cvd
+ggsurvplot(fit1_age, comprisk, title = "CVD survival estimate - Age Comparison"  )
+ggsurvplot(fit2_age, comprisk, title = "Other Causes survival estimate - Age Comparison" )
+ggsurvplot(fit3_age, comprisk , title ="Any outcome - Age Comparison")
+```
+In these plots we firstly plotted our Age distribution to see how many patients of each age there were. Then using the mean of 70 years old, we plotted survival curves. Each of the plots compare subjects under 70 years of age, and those 70 years or older.  The first plot compares this age split when considering CVD as our event, the second plot compares the age split when considering other causes as our event, and the third plot compares the age split for any outcome. 
+
+
+Age has a statistically significant effect on our survival time for all of our coxph models.
+
+We are creating coxph models with bmi as the covariate of interest.
+
+```{r}
+coxbmi1 <- coxph(vec1~BMI, data = comprisk)
+summary(coxbmi1)
+```
+
+This coxph model uses BMI as our covariate when we fit our coxph model for CVD  as our event of interest. We can interpret these results by noticing the coefficient = 0.06. This number is positive, therefore it positively affects the hazard ratio and hence negatively influences the survival function. p = 0.1.03e-06 is greater than alpha = 0.05, so we reject the null hypothesis and conclude that it is statistically significant to include bmi in this model.
+
+```{r}
+coxbmi2 <- coxph(vec2~BMI, data = comprisk)
+summary(coxbmi2)
+```
+
+This coxph model uses BMI as our covariate when we fit our coxph model for "other causes" as our event of interest. We can interpret these results by noticing the coefficient = -0.07002. This number is negative, therefore it negatively affects the hazard ratio and hence positively influences the survival function. p = 9.04e-06 is less than alpha = 0.05, so we reject the null hypothesis and conclude that it is statistically significant to include BMI in this model.
+
+```{r}
+coxbmi3 <- coxph(vec3~BMI, data = comprisk)
+summary(coxbmi3)
+```
+
+
+This coxph model uses BMI as our covariate when we fit our coxph model for any outcome. We can interpret these results by noticing the coefficient = 0.003229. This number is positive, therefore it positively affects the hazard ratio and hence negatively influences the survival function. p = 0.747 is greater than alpha = 0.05, so we fail to reject the null hypothesis and conclude that it is not statistically significant to include BMI in this model.
+
+NOT SURE ABOUT GRAPH
+
+```{r}
+ggplot(comprisk)+
+  geom_histogram(aes(x =BMI))
+mean(comprisk.bmi)
+
+fit1_age <- survfit(vec1~BMI<27.5, data = comprisk)
+fit2_age <- survfit(vec2~BMI<27.5, data = comprisk)
+fit3_age <- survfit(vec3~BMI<27.5, data = comprisk)
+# fits <- list(gender = f1)
+# legend.title <- list("gender")
+# gender_plot_cvd <- ggsurvplot_combine(fits, comprisk, legend.title = legend.title)
+# gender_plot_cvd
+ggsurvplot(fit1_age, comprisk, title = "CVD survival estimate - BMI Comparison", xlab = "Days"  )
+ggsurvplot(fit2_age, comprisk, title = "Other Causes survival estimate - BMI Comparison" , xlab = "Days" )
+ggsurvplot(fit3_age, comprisk , title ="Any outcome - BMI Comparison", xlab = "Days" )
+```
+In plotting our BMI comparisons we took a similar approach as we did with age. We analyzed the distribution of BMI among our subject, then calculated the mean which was equal to about 27.5. Each of the plots compare subjects under 27.5 BMI, and those over 27.5 BMI.  The first plot compares this BMI split when considering CVD as our event, the second plot compares the BMI split when considering other causes as our event, and the third plot compares the BMI split for any outcome.  
+
+
+
+
+BMI DOES seem to have a statistically significant effect on our survival time model.
+
+AIC and Stepwise Function
+
+```{r}
+comprisk.surv <- Surv(comprisk.time,status1)
+fit1 <- coxph(comprisk.surv ~ comprisk.gender+ comprisk.age+ comprisk.bmi, data = comprisk)
+fit2 <- coxph(comprisk.surv ~ 1, comprisk)
+stepAIC(fit2, direction = "forward", 
+        scope = list(upper=fit1, lower=fit2))
+
+```
+
+```{r}
+coxph(formula = comprisk.surv ~ comprisk.age + comprisk.bmi, 
+    data = comprisk)
+```
+
+We have discovered the best model for competing risk model from the previous line of code, and we conclude it is the best because it has the lowest AIC (3493.72). The model includes the covariates age and bmi, while excluding gender from the model. This conclusion is in agreement with our conclusions drawn from our coxph analysis.
+
+***Testing Proportional Hazards Assumptions***
+
+The assumptions necessary for inference include:
+
+Analyzing a log-log plot, and analyzing the coxzph.
+
+This is the log-log Plot for Gender.
+
+```{r}
+
+plot(survfit(vec1~gender,data = comprisk), fun = 'cloglog', xlab = 'Time', col = c(2,4),lwd = 2, ylab ='loglogsurvival', main = 'Log Log curve')
+```
+
+Since gender is our only discrete variable that we are looking at, we created a log-log plot to check our proportional hazards assumption. From the plot, we can see that the lines are not parallel and intersect, and thus the proportional hazards assumption is not met for gender.
+
+```{r}
+coxph(formula = comprisk.surv ~ comprisk.age + comprisk.bmi, 
+    data = comprisk)
+
+
+comprisk.surv.zph <- coxph(Surv(comprisk$Time,status1)  ~ as.factor(gender), data = comprisk)
+test.ph <- cox.zph(comprisk.surv.zph)
+print(test.ph)
+
+```
+
+With a p-value = 0.7421, which is greater than 0.05, we fail to reject the null hypothesis and conclude that the proportional hazards assumption is met.
+
+```{r}
+ggcoxzph(test.ph)
+```
+
+The residuals (red dots) are essentially parallel to the line y=0 which shows that there is not a significant pattern to the deviation.
+
+To summarize this report, we've performed Cox Proportional Hazard models, indicating that age and bmi were the only statistically significant covariates in our data. We also performed AIC Step-wise selection, indicating the same results from our COXPH, that the most efficient model would be: coxph(formula = comprisk.surv \~ comprisk.age + comprisk.bmi, data = comprisk). Furthermore our cumulative incidence analysis found that\_\_\_\_.
+
+References:
+
+Hosmer, D.W. and Lemeshow, S. and May, S.\
+(2008) Applied\
+Survival Analysis: Regression Modeling of Time to Event Data: Second\
+Edition,\
+John Wiley and Sons Inc., New York, NY
+
+Statistical Methods for Cohort Studies of CKD: Survival Analysis in the Setting of Competing Risks Jesse Yenchih Hsu,\*† Jason A. Roy,\*† Dawei Xie,\*† Wei Yang,\*† Haochang Shou,\*† Amanda Hyre Anderson,\*† J. Richard Landis,\*† Christopher Jepson,\*† Myles Wolf,‡ Tamara Isakova,§\| Mahboob Rahman,¶ \*\*†† and Harold I. Feldman,\*† and on behalf of the Chronic Renal Insufficiency Cohort (CRIC) Study Investigators
